@@ -1,0 +1,30 @@
+MFT SUPPORT - STANDARD OPERATING PROCEDURES
+============================================================
+
+1. PASSWORD RESET POLICY
+   - Password reset requests must come from authorized Trading Partner (TP) contacts only.
+   - Job Owner (JO) approval is MANDATORY before processing any password reset.
+   - Always CC the Job Owner in the reply email.
+   - Confirm TP identity before resetting credentials.
+
+2. CONNECTION FAILURE TROUBLESHOOTING
+   - Check MFT logs for error codes.
+   - Verify firewall/IP whitelist settings with TP.
+   - Confirm protocol settings: SFTP (port 22), FTPS (port 21/990), AS2 (port 4080).
+   - Escalate to L2 if unresolved within 2 hours.
+
+3. TRANSFER FAILURE POLICY
+   - Acknowledge email within 1 hour.
+   - Check BIS Process Monitor for transfer status.
+   - Notify JO if business-critical file is delayed by more than 30 minutes.
+
+4. NEW TP ONBOARDING
+   - Requires JO sign-off before initiating setup.
+   - Setup time: 3-5 business days.
+   - Provide TP with connection details only after JO approval.
+
+5. ESCALATION MATRIX
+   - L1 Support: Initial triage, basic troubleshooting (0-2 hrs)
+   - L2 Support: Complex issues, firewall changes (2-4 hrs)
+   - JO: Business escalations, approvals
+   - Manager: SLA breaches
