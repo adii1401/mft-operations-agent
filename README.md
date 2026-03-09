@@ -21,6 +21,7 @@ An AI-powered operations assistant for MFT/EDI support engineers. Built with Lan
 
 ## Architecture
 
+```mermaid
 flowchart TD
     User(["👤 Support Engineer"])
     UI["HTML Chat UI — static/index.html"]
@@ -52,6 +53,7 @@ flowchart TD
     T6 --> D4
     D4 -. "indexed from" .-> D3
     T5 --> D5
+```
 
 ---
 
