@@ -6,7 +6,9 @@ Deploy on Hugging Face Spaces by end of Day 5.
 
 ---
 
-## Status: Day 2 Complete ✅
+## Status: Day 4 Complete ✅ — Live on Hugging Face Spaces
+
+🔗 https://huggingface.co/spaces/aditya1401/mft-operations-agent
 
 ---
 
@@ -16,8 +18,8 @@ Deploy on Hugging Face Spaces by end of Day 5.
 |-----|------|--------|
 | Day 1 | FastAPI + LangGraph agent + chat UI working locally | ✅ Done |
 | Day 2 | Tools reading from docs, ChromaDB vector search, tools stabilized | ✅ Done |
-| Day 3 | Fix remaining tool bugs, conversation memory polish, edge cases | 🔲 Pending |
-| Day 4 | Deploy to Hugging Face Spaces | 🔲 Pending |
+| Day 3 | New tools, edge case fixes, data moved from hardcode to Excel | ✅ Done |
+| Day 4 | Deploy to Hugging Face Spaces | ✅ Done |
 | Day 5 | README polish, update resume, LinkedIn post | 🔲 Pending |
 
 ---
@@ -50,34 +52,41 @@ Deploy on Hugging Face Spaces by end of Day 5.
 - Groq with `llama-3.3-70b-versatile` confirmed as only reliable option
 - Committed and pushed to GitHub
 
-**Known issues for Day 3:**
-- `get_pending_followups` called wrong tool for "Show overdue follow-ups" query
-- `generate_onboarding_checklist` not tested (hit token limit)
-- Agent initializes twice on startup (uvicorn behavior — cosmetic, not a bug)
+---
+
+## Day 3 — Completed ✅
+
+- Added 2 new tools: `detect_sla_breaches` and `get_onboarding_status`
+- SLA thresholds set per protocol: SFTP=4h, AS2=2h, FTPS=6h
+- SLA simulation seeded with `tp_id + hour` — consistent within session, changes naturally over time
+- Onboarding tracker moved from hardcoded dict to `onboarding_tracker.xlsx` in docs/
+- Fixed Excel date parsing — datetime objects handled correctly, OVERDUE flag working
+- Added `Connection Type` and `Password Reset Allowed` fields to `load_tp_master()`
+- `get_tp_details` updated to show new fields
+- `draft_escalation_email` now includes password reset warning when JO approval required
+- Fixed duplicate `get_onboarding_status` function definition
+- Added `recursion_limit: 10` to agent invoke to prevent infinite tool loops
+- Registered both new tools in `agent.py` TOOLS list and SYSTEM_PROMPT
 
 ---
 
-## Day 3 — Pending 🔲
+## Day 4 — Completed ✅
 
-- [ ] Fix system prompt for `get_pending_followups` tool description
-- [ ] Test all 5 suggestion chips end-to-end
-- [ ] Test multi-turn conversation memory
-- [ ] Handle edge cases: unknown TP ID, empty follow-ups, unsupported protocol
-- [ ] Add requirements.txt with pinned versions
-
----
-
-## Day 4 — Pending 🔲
-
-- [ ] Create Hugging Face Space
-- [ ] Set GROQ_API_KEY as Space secret
-- [ ] Push code, verify deployment
-- [ ] Test live URL
+- Created Dockerfile with `python:3.11-slim` base
+- Fixed ChromaDB cold start failure — pre-download embedding model at Docker build time
+- Created `.dockerignore` to exclude `.env`, `chroma_db`, `__pycache__`
+- Updated `requirements.txt` with all 13 required packages
+- Added HF Spaces frontmatter to README.md
+- Created HF Space (Docker SDK, public, port 7860)
+- Set `GROQ_API_KEY` as Space secret
+- Pushed to Hugging Face Spaces via Git
+- App live and running at https://huggingface.co/spaces/aditya1401/mft-operations-agent
 
 ---
 
 ## Day 5 — Pending 🔲
 
+- [ ] Test all 8 tools on live URL (Groq limit resets midnight UTC)
 - [ ] Final README polish with screenshots
 - [ ] Update resume with Project 2
 - [ ] LinkedIn post
@@ -94,7 +103,7 @@ FastAPI (app.py)
         ↓
 MFTAgent — LangGraph create_react_agent
         ↓
-6 Tools (tools.py)
+8 Tools (tools.py)
         ↓
 docs/ folder + ChromaDB + SQLite
 ```
