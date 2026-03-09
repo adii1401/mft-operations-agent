@@ -11,39 +11,64 @@ An AI-powered operations assistant for MFT/EDI support engineers. Built with Lan
 
 ## Demo
 
-> Ask the agent about trading partner details, transfer failures, escalations, and onboarding — it looks up real docs and gives actionable responses.
+> Ask the agent about trading partner details, transfer failures, SLA breaches, onboarding status, escalations — it looks up real docs and gives actionable responses.
 
 ![MFT Operations Agent](static/preview.png)
 
-## Features
+🔗 **Live:** https://huggingface.co/spaces/aditya1401/mft-operations-agent
 
-- **TP Lookup** — Find trading partner details, Job Owner, protocol, and status by TP ID or company name
-- **Transfer Status** — Check latest file transfer status with error diagnosis
-- **Pending Follow-ups** — View overdue and escalated items from the tracker database
-- **Knowledge Base Search** — Semantic vector search over MFT SOPs and procedures using ChromaDB
-- **Escalation Drafting** — Auto-generate professional escalation emails with TP context
-- **Onboarding Checklist** — Protocol-specific onboarding steps for new trading partners
+---
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    User(["👤 Support Engineer"])
+    UI["HTML Chat UI\nstatic/index.html"]
+    API["FastAPI Backend\napp.py\nPOST /chat  /reset  /health"]
+    Agent["MFTAgent\nagent.py\nLangGraph create_react_agent\nLLaMA 3.3 70B via Groq"]
+
+    subgraph Tools ["⚙️ 8 LangChain Tools — tools.py"]
+        T1["get_tp_details"]
+        T2["check_transfer_status"]
+        T3["detect_sla_breaches"]
+        T4["get_onboarding_status"]
+        T5["get_pending_followups"]
+        T6["search_knowledge_base"]
+        T7["draft_escalation_email"]
+        T8["generate_onboarding_checklist"]
+    end
+
+    subgraph Data ["📁 Data Sources — docs/"]
+        D1["tp_master_list.xlsx\n(TP directory)"]
+        D2["onboarding_tracker.xlsx\n(onboarding pipeline)"]
+        D3["mft_procedures.txt\nescalation_guide.pdf\nmft_rules.docx"]
+        D4["ChromaDB\n(vector index)"]
+        D5["followups.db\n(SQLite)"]
+    end
+
+    User --> UI --> API --> Agent --> Tools
+    T1 & T2 & T3 & T7 --> D1
+    T4 --> D2
+    T6 --> D4
+    D4 -. "indexed from" .-> D3
+    T5 --> D5
 ```
-HTML Chat UI (static/index.html)
-        ↓ POST /chat
-FastAPI (app.py)
-        ↓
-MFTAgent class (agent.py)
-        ↓ LangGraph create_react_agent — LLaMA 3.3 70B via Groq
-6 Tools (tools.py)
-        ↓
-┌─────────────────────────────────────────┐
-│  tp_master_list.xlsx  (TP directory)    │
-│  mft_procedures.txt   (SOPs)            │
-│  escalation_guide.pdf (escalation paths)│
-│  mft_rules.docx       (approval matrix) │
-│  ChromaDB             (vector index)    │
-│  followups.db         (SQLite tracker)  │
-└─────────────────────────────────────────┘
-```
+
+---
+
+## Features
+
+- **TP Lookup** — Trading partner details, Job Owner, protocol, connection type, and password reset policy
+- **Transfer Status** — Latest file transfer status with error diagnosis and recommended actions
+- **SLA Breach Detection** — Flags breached and at-risk TPs by protocol threshold (SFTP=4h, AS2=2h, FTPS=6h)
+- **Onboarding Tracker** — Live stage tracking from `onboarding_tracker.xlsx` with OVERDUE alerts
+- **Pending Follow-ups** — Overdue and escalated items from SQLite tracker
+- **Knowledge Base Search** — Semantic vector search over MFT SOPs using ChromaDB + RAG
+- **Escalation Drafting** — Professional escalation emails with TP context and password reset warnings
+- **Onboarding Checklist** — Protocol-specific setup steps for new trading partners
+
+---
 
 ## Tech Stack
 
@@ -56,17 +81,24 @@ MFTAgent class (agent.py)
 | Frontend | HTML / CSS / Vanilla JS |
 | Doc Parsing | openpyxl, pdfplumber, python-docx |
 | Database | SQLite (follow-up tracker) |
+| Deployment | Docker on Hugging Face Spaces |
+
+---
 
 ## Tools
 
 | Tool | Description |
 |------|-------------|
-| `get_tp_details` | TP lookup by ID or name from Excel |
-| `check_transfer_status` | Latest transfer status with error codes |
-| `get_pending_followups` | Overdue/escalated items from SQLite |
-| `search_knowledge_base` | Semantic search via ChromaDB |
-| `draft_escalation_email` | Auto-drafted escalation with TP context |
-| `generate_onboarding_checklist` | Protocol-specific onboarding steps |
+| `get_tp_details` | TP lookup by ID or name — returns protocol, connection type, JO, password reset policy |
+| `check_transfer_status` | Latest transfer status with error codes and recommended actions |
+| `detect_sla_breaches` | SLA monitoring — flags breached and at-risk TPs by protocol threshold |
+| `get_onboarding_status` | Onboarding stage tracker — reads live from onboarding_tracker.xlsx |
+| `get_pending_followups` | Overdue/escalated items from SQLite follow-up tracker |
+| `search_knowledge_base` | Semantic search via ChromaDB — finds relevant SOPs and procedures |
+| `draft_escalation_email` | Auto-drafted escalation email with TP context and password reset warning |
+| `generate_onboarding_checklist` | Protocol-specific onboarding checklist for new TPs |
+
+---
 
 ## Setup
 
@@ -87,7 +119,6 @@ pip install -r requirements.txt
 Create a `.env` file:
 ```env
 GROQ_API_KEY=your_groq_api_key_here
-LLM_PROVIDER=groq
 ```
 
 ### Run
@@ -98,36 +129,46 @@ python app.py
 
 Open [http://localhost:7860](http://localhost:7860)
 
+---
+
 ## Project Structure
 
 ```
 mft-operations-agent/
-├── app.py              ← FastAPI backend
-├── agent.py            ← LangGraph agent with LLaMA 3.3
-├── tools.py            ← 6 LangChain tools
+├── app.py                      ← FastAPI backend
+├── agent.py                    ← LangGraph agent with LLaMA 3.3
+├── tools.py                    ← 8 LangChain tools
 ├── requirements.txt
-├── .env                ← API keys (not committed)
-├── .gitignore
-├── chroma_db/          ← Vector index (auto-generated)
+├── Dockerfile
+├── .dockerignore
+├── .env                        ← API keys (not committed)
+├── chroma_db/                  ← Vector index (auto-generated)
 ├── static/
-│   └── index.html      ← Dark theme chat UI
+│   └── index.html              ← Dark theme chat UI
 └── docs/
     ├── tp_master_list.xlsx
+    ├── onboarding_tracker.xlsx
     ├── mft_procedures.txt
     ├── escalation_guide.pdf
     └── mft_rules.docx
 ```
 
+---
+
 ## Notes
 
-- ChromaDB indexes docs on first startup — subsequent starts use the cached index
-- Groq free tier: 100k tokens/day. The vector search reduces token usage by ~80% vs full-doc loading
-- Follow-up tracker reads from `../mft-email-responder/data/followups.db` if Project 1 is present locally
-
-## Related Projects
-
-- [MFT Email Responder](https://github.com/adii1401/mft-email-responder) — Project 1: AI-powered email triage and response with follow-up tracker
+- ChromaDB embedding model is pre-downloaded at Docker build time — no cold start failures
+- Groq free tier: 100k tokens/day. Vector search reduces token usage ~80% vs full-doc loading
+- SLA thresholds are protocol-based: SFTP=4h, AS2=2h, FTPS=6h
+- Onboarding tracker reads live from `onboarding_tracker.xlsx` — update the file to reflect real pipeline
+- Agent recursion limited to 10 steps to prevent infinite tool loops
 
 ---
 
-Built as part of an AI Automation Engineer portfolio. Part of a series of MFT/EDI automation tools.
+## Related Projects
+
+- [MFT Email Responder](https://github.com/adii1401/mft-email-responder) — Project 1: AI-powered email triage and response with RAG + Microsoft Graph API
+
+---
+
+Built as part of an AI Automation Engineer portfolio.
