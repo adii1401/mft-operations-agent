@@ -3,5 +3,11 @@ uvicorn
 langchain
 langchain-groq
 langchain-core
+langchain-community
+langgraph
 python-dotenv
 pydantic
+openpyxl
+pdfplumber
+python-docx
+chromadb

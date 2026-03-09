@@ -1,4 +1,6 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_groq import ChatGroq
 from langgraph.prebuilt import create_react_agent
@@ -9,6 +11,8 @@ from tools import (
     search_knowledge_base,
     draft_escalation_email,
     generate_onboarding_checklist,
+    detect_sla_breaches,              
+    get_onboarding_status,        
 )
 
 TOOLS = [
@@ -18,6 +22,8 @@ TOOLS = [
     search_knowledge_base,
     draft_escalation_email,
     generate_onboarding_checklist,
+    detect_sla_breaches,          
+    get_onboarding_status,        
 ]
 
 SYSTEM_PROMPT = """You are an MFT Operations Agent for an enterprise B2B integration team.
@@ -31,6 +37,8 @@ You have access to these tools:
 - search_knowledge_base: Find SOPs, policies, and procedures
 - draft_escalation_email: Draft a professional escalation email
 - generate_onboarding_checklist: Create onboarding checklist for new TPs
+- detect_sla_breaches: Check which trading partners have breached or are at risk of breaching SLA
+- get_onboarding_status: Track onboarding progress for new trading partners being set up
 
 Guidelines:
 - ALWAYS use tools to get accurate information — never guess or make up TP details
@@ -60,8 +68,9 @@ class MFTAgent:
     def chat(self, user_message: str) -> str:
         try:
             result = self.agent.invoke({
-                "messages": self.chat_history + [HumanMessage(content=user_message)]
-            })
+                "messages": self.chat_history + [HumanMessage(content=user_message)]},
+                config={"recursion_limit": 10}
+            )
             answer = result["messages"][-1].content
 
             self.chat_history.append(HumanMessage(content=user_message))

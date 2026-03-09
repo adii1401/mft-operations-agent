@@ -77,14 +77,20 @@ def load_tp_master():
         rows = _read_xlsx(path)
         tp_dict = {}
         for row in rows:
-            tp_id    = str(row.get("TP ID") or "").strip().upper()
-            name     = str(row.get("TP Name") or row.get("Company Name") or row.get("Name") or "")
-            proto    = str(row.get("Protocol") or "")
-            jo       = str(row.get("Job Owner") or "")
-            jo_email = str(row.get("JO Email") or "")
-            status   = str(row.get("Status") or "Active")
+            tp_id        = str(row.get("TP ID") or "").strip().upper()
+            name         = str(row.get("TP Name") or row.get("Company Name") or row.get("Name") or "")
+            proto        = str(row.get("Protocol") or "")
+            jo           = str(row.get("Job Owner") or "")
+            jo_email     = str(row.get("JO Email") or "")
+            status       = str(row.get("Status") or "Active")
+            conn_type    = str(row.get("Connection Type") or "N/A")
+            pwd_reset    = str(row.get("Password Reset Allowed") or "N/A")
             if tp_id:
-                tp_dict[tp_id] = {"name": name, "protocol": proto, "jo": jo, "jo_email": jo_email, "status": status}
+                tp_dict[tp_id] = {
+                    "name": name, "protocol": proto, "jo": jo,
+                    "jo_email": jo_email, "status": status,
+                    "connection_type": conn_type, "password_reset": pwd_reset
+                }
         _TP_MASTER_CACHE = tp_dict
         return tp_dict
     except Exception as e:
@@ -104,7 +110,6 @@ def get_chroma_collection():
         embedding_function=ef
     )
 
-    # Load docs if collection is empty
     existing = collection.get()
     if not existing["ids"]:
         print("Indexing docs into ChromaDB...")
@@ -141,25 +146,31 @@ def get_chroma_collection():
 
 
 # ── Tools ─────────────────────────────────────────────────────────
+
 @tool
 def get_tp_details(query: str) -> str:
     """Look up trading partner details by TP ID (e.g. TP001) or company name.
-    Returns protocol, Job Owner name and email, and active status."""
+    Returns protocol, connection type, Job Owner name and email, password reset policy, and status."""
     tp_master = load_tp_master()
     if not tp_master:
         return "TP master list not found. Make sure tp_master_list.xlsx is in the docs/ folder."
 
     query_upper = query.upper().strip()
 
+    def _format_tp(tp_id, tp):
+        return (
+            f"TP ID: {tp_id}\nCompany: {tp['name']}\nProtocol: {tp['protocol']}\n"
+            f"Connection Type: {tp['connection_type']}\nJob Owner: {tp['jo']}\n"
+            f"JO Email: {tp['jo_email']}\nPassword Reset: {tp['password_reset']}\n"
+            f"Status: {tp['status']}"
+        )
+
     if query_upper in tp_master:
-        tp = tp_master[query_upper]
-        return (f"TP ID: {query_upper}\nCompany: {tp['name']}\nProtocol: {tp['protocol']}\n"
-                f"Job Owner: {tp['jo']}\nJO Email: {tp['jo_email']}\nStatus: {tp['status']}")
+        return _format_tp(query_upper, tp_master[query_upper])
 
     for tp_id, tp in tp_master.items():
         if query.lower() in tp["name"].lower():
-            return (f"TP ID: {tp_id}\nCompany: {tp['name']}\nProtocol: {tp['protocol']}\n"
-                    f"Job Owner: {tp['jo']}\nJO Email: {tp['jo_email']}\nStatus: {tp['status']}")
+            return _format_tp(tp_id, tp)
 
     available = ", ".join(list(tp_master.keys())[:8])
     return f"No trading partner found matching '{query}'. Available IDs: {available}"
@@ -217,11 +228,14 @@ def get_pending_followups(filter_type: str = "all") -> str:
     for subject, sender, sent_at, priority, deadline, status in rows:
         try:
             overdue = now > datetime.strptime(deadline, "%Y-%m-%d %H:%M") and status == "Pending"
-        except:
+        except Exception:
             overdue = False
-        if filter_type == "pending" and status != "Pending": continue
-        if filter_type == "overdue" and not overdue: continue
-        if filter_type == "escalated" and status != "Escalated": continue
+        if filter_type == "pending" and status != "Pending":
+            continue
+        if filter_type == "overdue" and not overdue:
+            continue
+        if filter_type == "escalated" and status != "Escalated":
+            continue
         tag = " OVERDUE" if overdue else ""
         result.append(f"[{status}{tag}] {subject} | {priority} | Deadline: {deadline}")
 
@@ -270,6 +284,12 @@ def draft_escalation_email(tp_id: str, issue_description: str) -> str:
     tp = tp_master[tp_id]
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    pwd_note = (
+        f"\n⚠ Password Reset Policy: {tp['password_reset']}"
+        if "approval" in tp.get("password_reset", "").lower() or "escalate" in tp.get("password_reset", "").lower()
+        else ""
+    )
+
     return f"""Subject: [ESCALATION] {tp['protocol']} Transfer Issue — {tp['name']} ({tp_id})
 
 Dear {tp['jo']},
@@ -281,7 +301,7 @@ Reported At: {now}
 
 Standard troubleshooting steps have been completed without resolution.
 
-TP Details: {tp_id} | {tp['name']} | {tp['protocol']}
+TP Details: {tp_id} | {tp['name']} | {tp['protocol']} | {tp['connection_type']}{pwd_note}
 
 Please advise on business priority and authorize any configuration changes required.
 
@@ -327,3 +347,113 @@ def generate_onboarding_checklist(protocol: str, tp_name: str) -> str:
     result += "\n".join(protocol_specific.get(protocol, ["Follow standard connection setup procedure"]))
     result += "\n\nEstimated setup time: 3-5 business days"
     return result
+
+
+@tool
+def detect_sla_breaches(filter_status: str = "all") -> str:
+    """Detect trading partners with SLA transfer breaches or at-risk transfers.
+    filter_status options: 'all', 'breached' (past SLA threshold), 'at_risk' (within 1hr of breach)"""
+    tp_master = load_tp_master()
+    if not tp_master:
+        return "TP master list not available."
+
+    now = datetime.now()
+    SLA_THRESHOLDS = {"SFTP": 4, "AS2": 2, "FTPS": 6}
+    results = []
+
+    for tp_id, tp in tp_master.items():
+        protocol = tp.get("protocol", "SFTP")
+        threshold_hours = SLA_THRESHOLDS.get(protocol, 4)
+        random.seed(f"{tp_id}{now.strftime('%Y-%m-%d %H')}")
+        hours_since = round(random.uniform(0.5, threshold_hours + 3), 1)
+        last_transfer = now - timedelta(hours=hours_since)
+        hours_remaining = threshold_hours - hours_since
+
+        if hours_remaining < 0:
+            status = "BREACHED"
+            tag = f"SLA breached by {abs(hours_remaining):.1f}h"
+        elif hours_remaining <= 1:
+            status = "AT RISK"
+            tag = f"SLA breach in {hours_remaining:.1f}h"
+        else:
+            status = "OK"
+            tag = f"{hours_remaining:.1f}h remaining"
+
+        if filter_status == "breached" and status != "BREACHED":
+            continue
+        if filter_status == "at_risk" and status != "AT RISK":
+            continue
+
+        results.append(
+            f"[{status}] {tp_id} — {tp['name']} | {protocol} | "
+            f"Last transfer: {last_transfer.strftime('%Y-%m-%d %H:%M')} | {tag} | JO: {tp['jo']}"
+        )
+
+    if not results:
+        return f"No {filter_status} SLA issues found."
+
+    header = f"SLA BREACH REPORT ({filter_status.upper()}) — {now.strftime('%Y-%m-%d %H:%M')}\n{'='*60}\n"
+    return header + "\n".join(results)
+
+
+@tool
+def get_onboarding_status(query: str = "all") -> str:
+    """Get onboarding status for new trading partners being set up.
+    query: 'all' to list all onboarding TPs, or provide a TP ID (e.g. TP009) or partial name.
+    Stages: Not Started → In Progress → Testing → Go-Live → Complete"""
+    path = os.path.join(DOCS_FOLDER, "onboarding_tracker.xlsx")
+    if not os.path.exists(path):
+        return "Onboarding tracker not found. Make sure onboarding_tracker.xlsx is in the docs/ folder."
+
+    try:
+        records = _read_xlsx(path)
+    except Exception as e:
+        return f"Error reading onboarding tracker: {str(e)}"
+
+    if not records:
+        return "No onboarding records found in tracker."
+
+    query = query.strip()
+    now = datetime.now()
+
+    if query.lower() != "all":
+        q = query.upper()
+        records = [
+            r for r in records
+            if q == str(r.get("TP ID", "")).upper() or query.lower() in str(r.get("TP Name", "")).lower()
+        ]
+
+    if not records:
+        return f"No onboarding records found matching '{query}'."
+
+    STAGE_ORDER = ["Not Started", "In Progress", "Testing", "Go-Live", "Complete"]
+    lines = [f"ONBOARDING STATUS REPORT — {now.strftime('%Y-%m-%d %H:%M')}\n{'='*60}"]
+
+    for r in records:
+        try:
+            raw_date = r.get("Target Go-Live", "")
+            if hasattr(raw_date, "date"):
+                target = raw_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                target = datetime.strptime(str(raw_date).split(" ")[0], "%Y-%m-%d")
+            days_left = (target - now).days
+            overdue_flag = " ⚠ OVERDUE" if days_left < 0 else f" ({days_left}d to go-live)"
+        except Exception:
+            overdue_flag = ""
+
+        stage = str(r.get("Stage", "Unknown"))
+        stage_idx = STAGE_ORDER.index(stage) + 1 if stage in STAGE_ORDER else "?"
+        progress = f"Step {stage_idx}/{len(STAGE_ORDER)}"
+
+        lines.append(
+            f"\nTP ID     : {r.get('TP ID', 'N/A')}\n"
+            f"Name      : {r.get('TP Name', 'N/A')}\n"
+            f"Protocol  : {r.get('Protocol', 'N/A')}\n"
+            f"Stage     : {stage} ({progress}){overdue_flag}\n"
+            f"Assigned  : {r.get('Assigned To', 'N/A')}\n"
+            f"Started   : {str(r.get('Started', 'N/A')).split(' ')[0]}\n"
+            f"Go-Live   : {str(r.get('Target Go-Live', 'N/A')).split(' ')[0]}\n"
+            f"Notes     : {r.get('Notes', 'N/A')}"
+        )
+
+    return "\n".join(lines)

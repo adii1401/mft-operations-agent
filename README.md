@@ -1,4 +1,11 @@
-# MFT Operations Agent 🤖
+---
+title: MFT Operations Agent
+emoji: 🔄
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+---
 
 An AI-powered operations assistant for MFT/EDI support engineers. Built with LangGraph, FastAPI, and LLaMA 3.3 via Groq.
 
