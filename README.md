@@ -21,12 +21,11 @@ An AI-powered operations assistant for MFT/EDI support engineers. Built with Lan
 
 ## Architecture
 
-```mermaid
 flowchart TD
     User(["👤 Support Engineer"])
-    UI["HTML Chat UI\nstatic/index.html"]
-    API["FastAPI Backend\napp.py\nPOST /chat  /reset  /health"]
-    Agent["MFTAgent\nagent.py\nLangGraph create_react_agent\nLLaMA 3.3 70B via Groq"]
+    UI["HTML Chat UI — static/index.html"]
+    API["FastAPI Backend — app.py"]
+    Agent["MFTAgent — LangGraph create_react_agent — LLaMA 3.3 70B via Groq"]
 
     subgraph Tools ["⚙️ 8 LangChain Tools — tools.py"]
         T1["get_tp_details"]
@@ -40,11 +39,11 @@ flowchart TD
     end
 
     subgraph Data ["📁 Data Sources — docs/"]
-        D1["tp_master_list.xlsx\n(TP directory)"]
-        D2["onboarding_tracker.xlsx\n(onboarding pipeline)"]
-        D3["mft_procedures.txt\nescalation_guide.pdf\nmft_rules.docx"]
-        D4["ChromaDB\n(vector index)"]
-        D5["followups.db\n(SQLite)"]
+        D1["tp_master_list.xlsx"]
+        D2["onboarding_tracker.xlsx"]
+        D3["mft_procedures.txt / escalation_guide.pdf / mft_rules.docx"]
+        D4["ChromaDB — vector index"]
+        D5["followups.db — SQLite"]
     end
 
     User --> UI --> API --> Agent --> Tools
@@ -53,7 +52,6 @@ flowchart TD
     T6 --> D4
     D4 -. "indexed from" .-> D3
     T5 --> D5
-```
 
 ---
 
